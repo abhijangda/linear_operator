@@ -26,6 +26,8 @@ class BaseTestCase(ABC):
         if not tensor1.shape == tensor2.shape:
             raise ValueError(f"tensor1 ({tensor1.shape}) and tensor2 ({tensor2.shape}) do not have the same shape.")
 
+        print(37, tensor1.shape, tensor1.stride(), tensor2.shape, tensor2.stride())
+
         if torch.allclose(tensor1, tensor2, rtol=rtol, atol=atol, equal_nan=equal_nan):
             return True
 

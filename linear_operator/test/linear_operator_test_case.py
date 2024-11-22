@@ -65,6 +65,7 @@ class RectangularLinearOperatorTestCase(BaseTestCase):
         # Test operator
         res = lhs @ linear_op
         actual = lhs @ evaluated
+        print(67, res.shape, actual.shape, lhs.shape)
         self.assertAllClose(res, actual)
 
         # Test __torch_function__

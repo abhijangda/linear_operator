@@ -16,6 +16,7 @@ from linear_operator.operators.triangular_linear_operator import _TriangularLine
 from linear_operator.utils.broadcasting import _matmul_broadcast_shape
 from linear_operator.utils.memoize import cached
 
+from pyfastkron import fastkrontorch as fk
 
 def _kron_diag(*lts) -> Tensor:
     """Compute diagonal of a KroneckerProductLinearOperator from the diagonals of the constituiting tensors"""
@@ -44,6 +45,19 @@ def _matmul(linear_ops, kp_shape, rhs):
         res = factor.reshape(*output_batch_shape, -1, num_cols)
     return res
 
+def _matmul2(linear_ops, kp_shape, rhs):
+    output_shape = _matmul_broadcast_shape(kp_shape, rhs.shape)
+    output_batch_shape = output_shape[:-2]
+
+    res = rhs.contiguous().expand(*output_batch_shape, *rhs.shape[-2:])
+    num_cols = rhs.size(-1)
+    for linear_op in linear_ops:
+        print(55, res.requires_grad, linear_op.to_dense().requires_grad, rhs.requires_grad)
+        res = res.view(*output_batch_shape, linear_op.size(-1), -1)
+        factor = linear_op._matmul(res)
+        factor = factor.view(*output_batch_shape, linear_op.size(-2), -1, num_cols).transpose(-3, -2)
+        res = factor.reshape(*output_batch_shape, -1, num_cols)
+    return res
 
 def _t_matmul(linear_ops, kp_shape, rhs):
     kp_t_shape = (*kp_shape[:-2], kp_shape[-1], kp_shape[-2])
@@ -270,9 +284,86 @@ class KroneckerProductLinearOperator(LinearOperator):
         is_vec = rhs.ndimension() == 1
         if is_vec:
             rhs = rhs.unsqueeze(-1)
+        torch.set_printoptions(sci_mode=False)
+        # has_grad_fn = rhs.grad_fn is not None
+        # for f in self.linear_ops:
+            # has_grad_fn = has_grad_fn or f.to_dense().grad_fn is not None
+        # requires_grad = rhs.requires_grad == True
+        # for f in self.linear_ops:
+        #     if f.to_dense().is_contiguous() == False:
+        #         print(294)
+        #         break
+        # print(requires_grad, has_grad_fn)
+        # if False and torch.is_grad_enabled():
+        # res1 = _matmul(self.linear_ops, self.shape, rhs.contiguous())
+            # print(284, res.requires_grad,)
+            # if res.requires_grad == False:
+            # _matmul2(self.linear_ops, self.shape, rhs.contiguous())
+            # if res.grad_fn == None:
+            #     print (rhs.grad_fn, rhs.requires_grad,
+            #           [f.to_dense().grad_fn for f in self.linear_ops],
+            #           [f.to_dense().requires_grad for f in self.linear_ops])
+    # else:
+        # print([(f.to_dense().shape, f.to_dense().stride()) for f in self.linear_ops])
+        # print(309, rhs.contiguous().shape, [t.to_dense().shape for t in self.linear_ops])
 
-        res = _matmul(self.linear_ops, self.shape, rhs.contiguous())
-
+        dense_linear_ops = [op.to_dense() for op in self.linear_ops]
+        res2 = fk.gekmm(dense_linear_ops, rhs.contiguous())
+        # try:
+            # raise Exception()
+        
+        # print(280, [(i.shape, i.stride()) for i in dense_linear_ops])
+        # print(311, res1.shape, res2.shape, res1.stride(), res2.stride())
+        # try:
+        # except Exception as e:
+        #     import traceback
+        #     traceback.print_exc()
+        #     q = input()
+        # print(res1.grad_fn, rhs.contiguous().grad_fn, [f.grad_fn for f in dense_linear_ops])
+        # if not torch.allclose(res1, res2, rtol=1e-3):
+        # #     to_break = False
+        #     print(281, [(i.shape, i.stride()) for i in dense_linear_ops])
+        #     print(282, res1.shape, rhs.contiguous().shape)
+        #     print(289, res1.shape, res1.dtype, res1.device, rhs.contiguous().shape)
+        #     print(290, res1.stride(), rhs.contiguous().stride())
+        #     print(291, res2.shape, res2.dtype, res2.device)
+        #     # print(292, res1)
+        #     # print(293, res2)
+        #     # print(res2[1:])
+            
+        #     # for i in range(res1.shape[0]):
+        #     #     for j in range(res1.shape[1]):
+        #     #         if not torch.allclose(res1[i,j], res2[i,j], rtol=1e-3):
+        #     #             # for o in dense_linear_ops:
+        #     #             #     print(o.shape)
+        #     #             x = res1[i,j].item()
+        #     #             y = res2[i,j].item()
+        #     #             print(301, i,j, x, y, 2323232, abs(x-y)/abs(y), abs(x - y), 1e-8 + 1e-3 * abs(y))
+        #     #             # print(res1.shape, res2.shape)
+        #     #             to_break = True
+        #     #             break
+        #     #     if to_break:
+        #     #         break
+        #     raise Exception("")
+        #     q = input()
+        # else:
+        #     print(292, "PASSED")
+        # raise Exception("346")
+        res = res2
+        if is_vec:
+            res = res.squeeze(-1)
+        return res
+    
+    def rmatmul(self: Float[LinearOperator, "... M N"],
+                rhs: Union[Float[Tensor, "... P M"], Float[Tensor, "... M"], Float[LinearOperator, "... P M"]],
+    ) -> Union[Float[Tensor, "... P N"], Float[Tensor, "N"], Float[LinearOperator, "... P N"]]:
+        is_vec = rhs.ndimension() == 1
+        if is_vec:
+            rhs = rhs.unsqueeze(-1)
+        print(363, torch.is_grad_enabled())
+        dense_linear_ops = [op.to_dense() for op in self.linear_ops]
+        res = fk.gemkm(rhs.contiguous(), dense_linear_ops)
+        
         if is_vec:
             res = res.squeeze(-1)
         return res
@@ -361,7 +452,9 @@ class KroneckerProductLinearOperator(LinearOperator):
         if is_vec:
             rhs = rhs.unsqueeze(-1)
 
-        res = _t_matmul(self.linear_ops, self.shape, rhs.contiguous())
+        # res = _t_matmul(self.linear_ops, self.shape, rhs.contiguous())
+        dense_linear_ops = [op._transpose_nonbatch().to_dense() for op in self.linear_ops]
+        res = fk.gekmm(dense_linear_ops, rhs.contiguous())
 
         if is_vec:
             res = res.squeeze(-1)

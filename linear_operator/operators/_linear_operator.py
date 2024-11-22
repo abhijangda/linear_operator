@@ -2123,8 +2123,8 @@ class LinearOperator(object):
         """
         if other.ndim == 1:
             return self.mT.matmul(other)
-        return self.mT.matmul(other.mT).mT
-
+        return self.mT.matmul(other.mT)
+        
     @cached(name="root_decomposition")
     def root_decomposition(
         self: Float[LinearOperator, "*batch N N"], method: Optional[str] = None

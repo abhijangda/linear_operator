@@ -80,6 +80,7 @@ class TestKroneckerProductLinearOperatorRectangular(RectangularLinearOperatorTes
     def evaluate_linear_op(self, linear_op):
         res = kron(linear_op.linear_ops[0].tensor, linear_op.linear_ops[1].tensor)
         res = kron(res, linear_op.linear_ops[2].tensor)
+        print(83, res.shape)
         return res
 
 
@@ -93,6 +94,7 @@ class TestKroneckerProductLinearOperatorRectangularMultiBatch(TestKroneckerProdu
         kp_linear_op = KroneckerProductLinearOperator(
             DenseLinearOperator(a), DenseLinearOperator(b), DenseLinearOperator(c)
         )
+        print(97)
         return kp_linear_op
 
 
